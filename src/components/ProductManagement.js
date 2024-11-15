@@ -1,137 +1,211 @@
-import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 
-function ProductManagement({ products, setProducts }) {
-  const location = useLocation();
-  const navigate = useNavigate();
+const ProductManagement = ({ setProducts }) => {
+  const [products, setLocalProducts] = useState([]);
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    description: '',
+    price: '',
+    quantity: '',
+  });
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [error, setError] = useState('');
 
-  
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [price, setPrice] = useState('');
-  const [quantity, setQuantity] = useState('');
 
-  
-  useEffect(() => {
-    if (location.state && location.state.product) {
-      const { product } = location.state;
-      setName(product.name);
-      setDescription(product.description);
-      setCategory(product.category);
-      
-      
-      if (typeof product.price === 'number') {
-        setPrice(product.price.toFixed(2)); 
-      } else {
-        setPrice(parseFloat(product.price).toFixed(2)); 
+  const fetchProducts = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/products');
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
       }
-      
-      setQuantity(product.quantity);
+      const data = await response.json();
+      setLocalProducts(data);
+      setProducts(data);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError('Error fetching products');
     }
-  }, [location.state]);
+  }, [setProducts]); 
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
-  const handleSubmit = (e) => {
+  const handleChange = (e) => {
+    setNewProduct({ ...newProduct, [e.target.name]: e.target.value });
+  };
+
+  const handleAddProduct = async (e) => {
     e.preventDefault();
-
-    // Create a new product object
-    const updatedProduct = {
-      id: location.state && location.state.product ? location.state.product.id : products.length + 1,
-      name,
-      description,
-      category,
-      price: parseFloat(price).toFixed(2), // Ensure price is a float with two decimals
-      quantity,
-    };
-
-    // If editing an existing product, update it; otherwise add a new one
-    if (location.state && location.state.product) {
-      const updatedProducts = products.map(product =>
-        product.id === updatedProduct.id ? updatedProduct : product
-      );
-      setProducts(updatedProducts);
-    } else {
-      // Add new product
-      setProducts([...products, updatedProduct]);
+    try {
+      if (editingProduct) {
+        await fetch(`http://localhost:5000/api/products/${editingProduct.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newProduct),
+        });
+        setEditingProduct(null);
+      } else {
+        await fetch('http://localhost:5000/api/products', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newProduct),
+        });
+      }
+      fetchProducts();
+      setNewProduct({ name: '', description: '', price: '', quantity: '' });
+      setError('');
+    } catch (err) {
+      console.error('Error adding/updating product:', err);
+      setError('Error adding/updating product');
     }
+  };
 
-    // Update local storage
-    localStorage.setItem('products', JSON.stringify([...products]));
+  const handleEditProduct = (product) => {
+    setEditingProduct(product);
+    setNewProduct(product);
+  };
 
-    // Navigate back to dashboard
-    navigate('/dashboard');
+  const handleSellProduct = async (id) => {
+    const product = products.find((p) => p.id === id);
+    if (product && product.quantity > 0) {
+      const updatedQuantity = product.quantity - 1;
+      try {
+        await fetch(`http://localhost:5000/api/products/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...product,
+            quantity: updatedQuantity,
+          }),
+        });
+        fetchProducts();
+      } catch (err) {
+        console.error('Error selling product:', err);
+        setError('Error selling product');
+      }
+    } else {
+      setError('Product is out of stock');
+    }
+  };
+
+  const handleDeleteProduct = async (id) => {
+    try {
+      await fetch(`http://localhost:5000/api/products/${id}`, {
+        method: 'DELETE',
+      });
+      fetchProducts();
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      setError('Error deleting product');
+    }
+  };
+
+
+  const lowStockProducts = products.filter(product => product.quantity < 10);
+
+  const formatPrice = (price) => {
+    const numericPrice = parseFloat(price);
+    return isNaN(numericPrice) ? 'N/A' : `M ${numericPrice.toFixed(2)}`;
   };
 
   return (
-    <section id="productManagement">
-      <h2>{location.state && location.state.product ? 'Edit Product' : 'Add New Product'}</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>Product Name:</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div>
-          <label>Description:</label>
-          <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} required />
-        </div>
-        <div>
-          <label>Category:</label>
-          <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} required />
-        </div>
-        <div>
-          <label>Price (M):</label>
-          <input 
-            type="number" 
-            value={price} 
-            onChange={(e) => setPrice(e.target.value)} 
-            step="0.01" 
-            required 
-          />
-        </div>
-        <div>
-          <label>Quantity:</label>
-          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
-        </div>
+    <div className="product-management">
+      <header className="header">
+        <h2>Product Management</h2>
+      </header>
 
-        {/* Submit Button */}
-        <button type="submit">{location.state && location.state.product ? 'Update Product' : 'Add Product'}</button>
+      <h2 className="header">{editingProduct ? 'Edit Product' : 'Add New Product'}</h2>
 
-        {}
-        <button type="button" onClick={() => navigate('/dashboard')}>Cancel</button>
+      <form onSubmit={handleAddProduct} className="product-form">
+        <input
+          type="text"
+          name="name"
+          value={newProduct.name}
+          onChange={handleChange}
+          placeholder="Product Name"
+          required
+        />
+        <input
+          type="text"
+          name="description"
+          value={newProduct.description}
+          onChange={handleChange}
+          placeholder="Description"
+          required
+        />
+        <input
+          type="number"
+          name="price"
+          value={newProduct.price}
+          onChange={handleChange}
+          placeholder="Price"
+          step="0.01"
+          required
+        />
+        <input
+          type="number"
+          name="quantity"
+          value={newProduct.quantity}
+          onChange={handleChange}
+          placeholder="Quantity"
+          required
+        />
+        <button type="submit">{editingProduct ? 'Update Product' : 'Add Product'}</button>
       </form>
 
-      {}
-      <h3>Product List</h3>
-      {products.length > 0 ? (
-        <table id="productListTable">
+      <h2 className="header">Product List</h2>
+
+      <section className="product-form-container">
+        {lowStockProducts.length > 0 && (
+          <div style={{ color: 'red', fontWeight: 'bold', marginBottom: '20px' }}>
+            Low on Stock:
+            <ul>
+              {lowStockProducts.map(product => (
+                <li key={product.id}>
+                  {product.name} (Quantity: {product.quantity})
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <table className="product-table">
           <thead>
             <tr>
-              <th>Product Name</th>
+              <th>Name</th>
               <th>Description</th>
-              <th>Category</th>
-              <th>Price (M)</th>
+              <th>Price</th>
               <th>Quantity</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {products.map(product => (
+            {products.map((product) => (
               <tr key={product.id}>
                 <td>{product.name}</td>
                 <td>{product.description}</td>
-                <td>{product.category}</td>
-                {/* Ensure price is displayed correctly */}
-                <td>M {parseFloat(product.price).toFixed(2)}</td> 
-                {/* Ensure quantity is displayed correctly */}
+                <td>{formatPrice(product.price)}</td>
                 <td>{product.quantity}</td>
+                <td>
+                  <button onClick={() => handleEditProduct(product)}>Edit</button>
+                  <button onClick={() => handleSellProduct(product.id)}>Sell</button>
+                  <button onClick={() => handleDeleteProduct(product.id)}>Delete</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      ) : (
-        <p>No products available.</p> // Message when there are no products
-      )}
-    </section>
+      </section>
+
+      {error && <p className="error">{error}</p>}
+    </div>
   );
-}
+};
 
 export default ProductManagement;

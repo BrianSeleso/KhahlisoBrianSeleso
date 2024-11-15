@@ -1,88 +1,97 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ProductBarChart from './ProductBarChart';
 
-function Dashboard({ products, lowStockAlert, setProducts }) {
+const Dashboard = () => {
   const navigate = useNavigate();
-  const [message, setMessage] = React.useState('');
+  const [products, setProducts] = useState([]);
 
-  const handleEditProduct = (productId) => {
-    const productToEdit = products.find(product => product.id === productId);
-    navigate('/product-management', { state: { product: productToEdit } });
-  };
-
-  const handleDeleteProduct = (productId) => {
-    if (window.confirm("Are you sure you want to delete this product?")) {
-      const updatedProducts = products.filter(product => product.id !== productId);
-      setProducts(updatedProducts);
-      setMessage("Product deleted successfully!");
-      setTimeout(() => setMessage(''), 3000);
+  
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/products');
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
+      }
+      const data = await response.json();
+      setProducts(data);
+    } catch (error) {
+      console.error('Error fetching products:', error);
     }
   };
 
-  const handleSellProduct = (productId) => {
-    const updatedProducts = products.map(product => {
-      if (product.id === productId) {
-        
-        return { ...product, quantity: Math.max(product.quantity - 1, 0) };
-      }
-      return product;
-    });
-    
-    setProducts(updatedProducts);
-    setMessage("Product sold successfully!");
-    setTimeout(() => setMessage(''), 3000);
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const formatPrice = (price) => {
+    const numericPrice = parseFloat(price);
+    return isNaN(numericPrice) ? 'N/A' : `M ${numericPrice.toFixed(2)}`; 
   };
 
-  return (
-    <section id="dashboard">
-      <h2>Stock Dashboard</h2>
-      {message && <div className="success-message">{message}</div>}
-      {lowStockAlert.length > 0 && (
-        <div id="lowStockAlert">
-          {lowStockAlert.map(product => (
-            <p key={product.id}>Product "{product.name}" is low on stock!</p>
-          ))}
-        </div>
-      )}
-      <table id="productTable">
-        <thead>
-          <tr>
-            <th>Product Name</th>
-            <th>Description</th>
-            <th>Category</th>
-            <th>Price (M)</th>
-            <th>Quantity</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map(product => (
-            <tr key={product.id}>
-              <td>{product.name}</td>
-              <td>{product.description}</td>
-              <td>{product.category}</td>
-              {/* Ensure price is displayed correctly */}
-              <td>M {parseFloat(product.price).toFixed(2)}</td> 
-              {}
-              <td>{product.quantity}</td>
-              <td>
-                {/* Edit, Delete, and Sell buttons */}
-                <button onClick={() => handleEditProduct(product.id)} aria-label={`Edit ${product.name}`}>Edit</button>
-                <button onClick={() => handleDeleteProduct(product.id)} aria-label={`Delete ${product.name}`}>Delete</button>
-                {/* Sell button */}
-                <button onClick={() => handleSellProduct(product.id)} aria-label={`Sell ${product.name}`}>Sell</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  const handleAddNewProduct = () => {
+    navigate('/products');
+  };
 
-      {}
-      <button onClick={() => navigate('/product-management')} style={{ marginTop: '10px', width: '150px' }}>
-        Add Product
-      </button>
-    </section>
+  const lowStockProducts = products.filter(product => product.quantity < 10);
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <header className="header">
+        <h2>Dashboard</h2>
+      </header>
+
+      <h3 className="header">Existing Products</h3>
+
+      <section style={{ marginTop: '20px' }}>
+        {lowStockProducts.length > 0 && (
+          <div style={{ color: 'red', fontWeight: 'bold', marginBottom: '20px' }}>
+            Low on Stock:
+            <ul>
+              {lowStockProducts.map(product => (
+                <li key={product.id}>{product.name} (Quantity: {product.quantity})</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {products.length === 0 ? (
+          <p>No products have been added yet.</p>
+        ) : (
+          <div>
+            <ProductBarChart products={products} />
+          </div>
+        )}
+      </section>
+
+      <h3 className="header">Product List</h3>
+      <section className="product-form-container">
+        <table className="product-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Price</th>
+              <th>Quantity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product) => (
+              <tr key={product.id}>
+                <td style={{ border: '1px solid #ddd', padding: '8px' }}>{product.name}</td>
+                <td style={{ border: '1px solid #ddd', padding: '8px' }}>{product.description}</td>
+                <td style={{ border: '1px solid #ddd', padding: '8px' }}>{formatPrice(product.price)}</td>
+                <td style={{ border: '1px solid #ddd', padding: '8px' }}>{product.quantity}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <button onClick={handleAddNewProduct} style={{ marginTop: '20px' }}>
+          Add New Product
+        </button>
+      </section>
+    </div>
   );
-}
+};
 
 export default Dashboard;
